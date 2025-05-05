@@ -10,6 +10,10 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6; /* gray-100 */
+            padding-bottom: 80px; /* Add padding to prevent FAB overlap */
+        }
+        @media (min-width: 640px) { /* sm breakpoint */
+             body { padding-bottom: 0; } /* Remove padding on larger screens */
         }
         .modal { transition: opacity 0.25s ease; }
         .modal-content { transition: transform 0.3s ease; }
@@ -32,23 +36,12 @@
         .status-badge-completed { background-color: #10b981; color: #065f46; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Style for scrollable modal form area */
         .modal-form-scroll {
-             max-height: 70vh; /* Adjust max height as needed */
-             overflow-y: auto;
-             padding-right: 1rem; /* Add some padding for the scrollbar */
-             margin-right: -1rem; /* Counteract the padding for layout */
+             max-height: 70vh; overflow-y: auto;
+             padding-right: 1rem; margin-right: -1rem;
         }
-
-        /* Hide scrollbar for Chrome, Safari and Opera */
-        .modal-form-scroll::-webkit-scrollbar {
-            display: none;
-        }
-        /* Hide scrollbar for IE, Edge and Firefox */
-        .modal-form-scroll {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-        }
+        .modal-form-scroll::-webkit-scrollbar { display: none; }
+        .modal-form-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
     </style>
 </head>
@@ -59,7 +52,7 @@
             <div class="flex items-center justify-between h-16">
                 <span class="text-xl font-bold">LexoTasks Manager</span>
                 <div class="flex items-center space-x-4">
-                    <button id="addTaskBtnNav" title="Add New Task" class="px-3 py-1.5 rounded-lg font-semibold text-sm transition duration-150 ease-in-out hover:bg-opacity-80 flex items-center" style="background-color: #C69E63; color: #002147;">
+                    <button id="addTaskBtnNav" title="Add New Task" class="hidden sm:flex px-3 py-1.5 rounded-lg font-semibold text-sm transition duration-150 ease-in-out hover:bg-opacity-80 items-center" style="background-color: #C69E63; color: #002147;">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                          </svg>
@@ -74,8 +67,7 @@
     </nav>
 
     <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div id="welcomeMessage" class="mb-5 text-lg text-gray-700">
-            </div>
+        <div id="welcomeMessage" class="mb-5 text-lg text-gray-700"></div>
 
         <div class="mb-6 flex flex-col sm:flex-row gap-4 items-center">
             <div class="relative flex-grow w-full sm:w-auto">
@@ -96,22 +88,26 @@
             </div>
         </div>
 
-        <div id="tasksList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            </div>
+        <div id="tasksList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         <div id="noTasksMessage" class="text-center text-gray-500 mt-10" style="display: none;">
-            No tasks found. Click 'Add Task' in the menu to create one!
+            No tasks found. Click 'Add Task' to create one!
         </div>
          <div id="noFilteredTasksMessage" class="text-center text-gray-500 mt-10" style="display: none;">
             No tasks match your current search/filter.
         </div>
     </main>
 
+    <button id="addTaskBtnFab" title="Add New Task" class="sm:hidden fixed bottom-6 right-6 p-4 rounded-full shadow-lg transition duration-150 ease-in-out hover:scale-110 z-30" style="background-color: #C69E63; color: #002147;">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+    </button>
+
     <div id="taskModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden modal px-4 py-8">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col">
             <div class="p-6 border-b border-gray-200">
                 <h3 id="modalHeader" class="text-xl font-semibold text-gray-800" style="color: #002147;">Add Task</h3>
             </div>
-
             <div class="p-6 modal-form-scroll">
                 <form id="taskForm" class="space-y-4">
                     <div>
@@ -151,9 +147,8 @@
                             <option value="Completed">Completed</option>
                         </select>
                     </div>
-                    </form>
+                </form>
              </div>
-
             <div class="flex justify-end items-center space-x-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
                 <div id="taskError" class="text-sm text-red-600 mr-auto min-h-[1.25rem]"></div>
                 <div id="taskLoader" style="display: none;">
@@ -170,14 +165,24 @@
     </div>
 
     <div id="taskDetailModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden modal px-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 modal-content">
-            <h3 class="text-xl font-semibold text-gray-800 mb-4" style="color: #002147;">Task Details</h3>
-            <div id="taskDetailsContent" class="space-y-3 text-sm text-gray-700 mb-5">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col">
+             <div class="p-6 border-b border-gray-200">
+                <h3 class="text-xl font-semibold text-gray-800" style="color: #002147;">Task Details</h3>
+             </div>
+             <div id="taskDetailsContent" class="p-6 space-y-3 text-sm text-gray-700 flex-grow overflow-y-auto">
                 </div>
-            <div class="flex justify-end">
-                <button type="button" id="closeDetailBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition duration-150 ease-in-out">
-                    Close
-                </button>
+             <div class="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+                 <button type="button" id="deleteTaskBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 ease-in-out">
+                     Delete Task
+                 </button>
+                 <div class="flex space-x-3">
+                    <button type="button" id="editTaskBtn" class="px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-150 ease-in-out" style="background-color: #002147;">
+                        Edit Task
+                    </button>
+                    <button type="button" id="closeDetailBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition duration-150 ease-in-out">
+                        Close
+                    </button>
+                 </div>
             </div>
         </div>
     </div>
