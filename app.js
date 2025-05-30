@@ -16,21 +16,48 @@ import {
     query,
     orderBy,
     where,
-    deleteDoc // Ensure deleteDoc is imported
+    deleteDoc
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // --- Helper Functions ---
 /**
- * Shows an HTML element by removing the 'display: none' style.
+ * Shows an HTML element by removing the 'hidden' class and adding 'flex' or 'block'.
  * @param {HTMLElement} el - The element to show.
+ * @param {string} displayType - 'flex' or 'block', defaults to 'flex' for modals.
  */
-function show(el) { if (el) el.style.display = ''; }
+function show(el, displayType = 'flex') {
+    if (el) {
+        el.classList.remove('hidden');
+        if (displayType === 'flex') el.classList.add('flex');
+        else if (displayType === 'block') el.classList.add('block');
+        else el.style.display = displayType; // Fallback for other display types
+        // For modals with opacity transition
+        if (el.classList.contains('modal')) {
+            setTimeout(() => el.classList.remove('opacity-0'), 10);
+        }
+    }
+}
 
 /**
- * Hides an HTML element by setting 'display: none'.
+ * Hides an HTML element by adding the 'hidden' class and removing 'flex' or 'block'.
  * @param {HTMLElement} el - The element to hide.
  */
-function hide(el) { if (el) el.style.display = 'none'; }
+function hide(el) {
+    if (el) {
+        // For modals with opacity transition
+        if (el.classList.contains('modal')) {
+            el.classList.add('opacity-0');
+            setTimeout(() => {
+                el.classList.add('hidden');
+                el.classList.remove('flex', 'block'); // Remove display classes
+            }, 250); // Match transition duration
+        } else {
+            el.classList.add('hidden');
+            el.classList.remove('flex', 'block');
+        }
+    }
+}
+
 
 /**
  * Sets the text content of an HTML element.
@@ -47,11 +74,12 @@ function clearInputs(form) { if (form) form.reset(); }
 
 /**
  * Escapes HTML special characters to prevent XSS.
- * @param {string} unsafe - The potentially unsafe string.
- * @returns {string} The escaped string.
+ * @param {string | number | null | undefined} unsafe - The potentially unsafe string.
+ * @returns {string} The escaped string, or empty string if input is null/undefined.
  */
 function escapeHtml(unsafe) {
-    if (typeof unsafe !== 'string') return unsafe;
+    if (unsafe === null || typeof unsafe === 'undefined') return '';
+    if (typeof unsafe !== 'string') unsafe = String(unsafe);
     return unsafe
          .replace(/&/g, "&amp;")
          .replace(/</g, "&lt;")
@@ -81,77 +109,61 @@ function debounce(func, wait) {
 
 
 // --- Routing Logic ---
-// Check if the current page is the login page
 const isLoginPage = window.location.pathname.endsWith('login.html');
-// Assume any other page is the dashboard
 const isDashboard = !isLoginPage;
 
 // --- Auth State Protection ---
-// Listen for changes in authentication state
 onAuthStateChanged(auth, user => {
     console.log("Auth state changed. User:", user);
     if (isLoginPage && user) {
-        // If on login page and user is logged in, redirect to dashboard
         console.log("User logged in, redirecting from login to dashboard.");
         window.location.replace('index.html');
     } else if (isDashboard && !user) {
-        // If on dashboard page and user is not logged in, redirect to login
         console.log("User not logged in, redirecting from dashboard to login.");
         window.location.replace('login.html');
     } else if (isDashboard && user) {
-        // If on dashboard page and user is logged in, initialize the dashboard
         console.log("User logged in on dashboard page. Initializing dashboard...");
-        // Use a flag to prevent multiple initializations if auth state changes rapidly
         if (!window.dashboardInitialized) {
-             initializeDashboard(user); // Pass the user object
-             window.dashboardInitialized = true; // Set the flag
+             initializeDashboard(user);
+             window.dashboardInitialized = true;
         }
     }
 });
 
 // --- Login Page Logic ---
 if (isLoginPage) {
-    // Get login form elements
     const loginForm = document.getElementById('loginForm');
     const loginBtn = document.getElementById('loginBtn');
     const loginError = document.getElementById('loginError');
     const loginLoader = document.getElementById('loginLoader');
 
     if (loginForm) {
-        // Add submit event listener to the login form
         loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Prevent default form submission
-            // Reset UI states
-            hide(loginError);
+            e.preventDefault();
+            hide(loginError); 
             setText(loginError, '');
-            show(loginLoader);
-            loginBtn.disabled = true;
+            show(loginLoader, 'block'); 
+            if (loginBtn) loginBtn.disabled = true;
 
-            // Get email and password from the form
             const email = loginForm.email.value.trim();
             const password = loginForm.password.value;
 
             try {
-                // Attempt to sign in with Firebase Auth
                 console.log(`Attempting login for: ${email}`);
                 await signInWithEmailAndPassword(auth, email, password);
                 console.log("Login successful.");
-                // Redirect is handled by the onAuthStateChanged listener
             } catch (err) {
-                // Handle login errors
                 console.error("Login failed:", err);
                 let message = 'Login failed. Please check your email and password.';
-                // Provide more specific error messages based on Firebase error codes
                 if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
                     message = 'Invalid email or password.';
                 } else if (err.code === 'auth/invalid-email') {
                     message = 'Please enter a valid email address.';
                 }
-                // Display error message and reset UI
                 setText(loginError, message);
-                show(loginError);
-                hide(loginLoader);
-                loginBtn.disabled = false;
+                show(loginError, 'block'); 
+                hide(loginLoader); 
+                if (loginBtn) loginBtn.disabled = false;
             }
         });
     } else {
@@ -165,13 +177,12 @@ if (isLoginPage) {
  * @param {object} currentUser - The Firebase user object.
  */
 function initializeDashboard(currentUser) {
-    // Validate user object
     if (!currentUser || !currentUser.uid) {
         console.error("Dashboard initialization called without a valid user. Aborting.");
-        window.location.replace('login.html'); // Redirect if user is invalid
+        window.location.replace('login.html');
         return;
     }
-    const currentUserId = currentUser.uid; // Store the user ID
+    const currentUserId = currentUser.uid;
     console.log(`Initializing dashboard elements and listeners for user: ${currentUserId}`);
 
     // Get references to all necessary DOM elements
@@ -179,12 +190,12 @@ function initializeDashboard(currentUser) {
     const tasksList = document.getElementById('tasksList');
     const noTasksMessage = document.getElementById('noTasksMessage');
     const noFilteredTasksMessage = document.getElementById('noFilteredTasksMessage');
-    const addTaskBtnNav = document.getElementById('addTaskBtnNav'); // Navbar button
-    const addTaskBtnFab = document.getElementById('addTaskBtnFab'); // FAB button
+    const addTaskBtnNav = document.getElementById('addTaskBtnNav');
+    const addTaskBtnFab = document.getElementById('addTaskBtnFab');
     const taskModal = document.getElementById('taskModal');
     const taskForm = document.getElementById('taskForm');
     const cancelTaskBtn = document.getElementById('cancelTaskBtn');
-    const submitTaskBtn = document.getElementById('submitTaskBtn'); // Button in modal footer
+    const submitTaskBtn = document.getElementById('submitTaskBtn');
     const taskError = document.getElementById('taskError');
     const taskLoader = document.getElementById('taskLoader');
     const addDetailBtn = document.getElementById('addDetailBtn');
@@ -196,295 +207,230 @@ function initializeDashboard(currentUser) {
     const welcomeMessageEl = document.getElementById('welcomeMessage');
     const searchInput = document.getElementById('searchInput');
     const statusFilter = document.getElementById('statusFilter');
-    // Note: Delete and Edit buttons within modals are retrieved later
+
+    // Invoice Generation Elements
+    const generateInvoiceBtnNav = document.getElementById('generateInvoiceBtnNav');
+    const generateInvoiceBtnFab = document.getElementById('generateInvoiceBtnFab');
+    const clientSelectionModal = document.getElementById('clientSelectionModal');
+    const clientSelectionForm = document.getElementById('clientSelectionForm');
+    const invoiceClientSelect = document.getElementById('invoiceClientSelect');
+    const clientSelectionError = document.getElementById('clientSelectionError');
+    const cancelClientSelectBtn = document.getElementById('cancelClientSelectBtn');
+    const nextToInvoiceFormBtn = document.getElementById('nextToInvoiceFormBtn');
+
+    const invoiceFormModal = document.getElementById('invoiceFormModal');
+    const invoiceClientNameDisplay = document.getElementById('invoiceClientNameDisplay');
+    const invoiceItemService = document.getElementById('invoiceItemService');
+    const invoiceItemDescription = document.getElementById('invoiceItemDescription');
+    const invoiceItemQty = document.getElementById('invoiceItemQty');
+    const invoiceItemPrice = document.getElementById('invoiceItemPrice');
+    const addInvoiceItemBtn = document.getElementById('addInvoiceItemBtn');
+    const invoiceItemsList = document.getElementById('invoiceItemsList');
+    const invoiceSubtotalDisplay = document.getElementById('invoiceSubtotalDisplay');
+    const invoiceGrandTotalDisplay = document.getElementById('invoiceGrandTotalDisplay');
+    const invoiceFormError = document.getElementById('invoiceFormError');
+    const cancelInvoiceFormBtn = document.getElementById('cancelInvoiceFormBtn');
+    const downloadInvoicePdfBtn = document.getElementById('downloadInvoicePdfBtn');
+    const closeInvoiceFormBtn = document.getElementById('closeInvoiceFormBtn'); 
+
 
     // State variables
-    let editingTaskId = null; // Track if we are editing an existing task
-    let allUserTasks = []; // Cache for all tasks fetched for the user
-    let currentSearchTerm = ''; // Current search input value
-    let currentStatusFilter = 'all'; // Current status filter value
+    let editingTaskId = null;
+    let allUserTasks = [];
+    let currentSearchTerm = '';
+    let currentStatusFilter = 'all';
+    let currentInvoiceItems = []; 
+    let selectedInvoiceClient = null; 
+    const CURRENCY_SYMBOL = "GMD"; 
 
     // --- Check if essential elements exist ---
-    console.log("DEBUG: Checking FAB element:", addTaskBtnFab); // Debug log
-    if (!logoutBtn || !tasksList || !addTaskBtnNav || !addTaskBtnFab || !taskModal || !taskForm || !taskDetailModal || !welcomeMessageEl || !searchInput || !statusFilter) {
+    if (!logoutBtn || !tasksList || !addTaskBtnNav || !addTaskBtnFab || !taskModal || !taskForm || !taskDetailModal || !welcomeMessageEl || !searchInput || !statusFilter ||
+        !generateInvoiceBtnNav || !generateInvoiceBtnFab || !clientSelectionModal || !invoiceFormModal || !closeInvoiceFormBtn) { 
         console.error("One or more dashboard elements could not be found. Aborting initialization.");
-        return; // Stop initialization if elements are missing
+        return;
     }
 
     // --- Initial Setup ---
-    // Display the personalized welcome message
     setText(welcomeMessageEl, `Welcome, ${escapeHtml(currentUser.email)}!`);
 
     // --- Event Listeners ---
 
-    // Logout Button
     logoutBtn.addEventListener('click', async () => {
         try {
             await signOut(auth);
             console.log("User signed out.");
-            window.dashboardInitialized = false; // Reset initialization flag
-            // Redirect is handled by onAuthStateChanged
+            window.dashboardInitialized = false;
         } catch (error) {
             console.error("Error signing out:", error);
         }
     });
 
-    // Modal helper functions (using Tailwind classes)
     function openModal(modalElement) {
-        if (modalElement) {
-            console.log("DEBUG: Opening modal:", modalElement.id); // Log which modal is opening
-            modalElement.classList.remove('hidden');
-            modalElement.classList.add('flex'); // Use flex for centering
-            // Delay opacity transition for smooth effect
-            setTimeout(() => modalElement.classList.remove('opacity-0'), 10);
-        } else {
-             console.error("DEBUG: Attempted to open a null modal element.");
-        }
+        show(modalElement); 
     }
     function closeModal(modalElement) {
-        if (modalElement) {
-            console.log("DEBUG: Closing modal:", modalElement.id); // Log which modal is closing
-            modalElement.classList.add('opacity-0');
-            // Wait for opacity transition before hiding completely
-            setTimeout(() => {
-                 modalElement.classList.add('hidden');
-                 modalElement.classList.remove('flex');
-            }, 250); // Match transition duration in CSS/HTML
-        } else {
-            console.error("DEBUG: Attempted to close a null modal element.");
-        }
+        hide(modalElement);
     }
 
-    // Function to open the Add/Edit Task modal in "Add" mode
     const openAddTaskModal = () => {
-        console.log("DEBUG: openAddTaskModal called!"); // Debug log
-        editingTaskId = null; // Ensure we are not in edit mode
-        setText(modalHeader, 'Add New Task'); // Set modal title
-        clearInputs(taskForm); // Reset the form
-        setText(taskError, ''); // Clear previous errors
-        hide(taskLoader); // Hide loader
-        submitTaskBtn.disabled = false; // Enable submit button
-        // Ensure at least one detail input field exists
+        editingTaskId = null;
+        setText(modalHeader, 'Add New Task');
+        clearInputs(taskForm);
+        setText(taskError, '');
+        hide(taskLoader);
+        submitTaskBtn.disabled = false;
         taskDetailsList.innerHTML = '<input type="text" class="task-detail-input" required placeholder="Detail 1">';
-        openModal(taskModal); // Show the modal
+        openModal(taskModal);
     };
 
-    // Attach the same handler to BOTH Add Task buttons (Nav and FAB)
-    if (addTaskBtnNav) {
-        console.log("DEBUG: Attaching listener to Nav button.");
-        addTaskBtnNav.addEventListener('click', openAddTaskModal);
-    }
-    if (addTaskBtnFab) {
-        console.log("DEBUG: Attaching listener to FAB button.");
-        addTaskBtnFab.addEventListener('click', openAddTaskModal);
-    }
-
-    // Cancel button in Add/Edit modal
+    addTaskBtnNav.addEventListener('click', openAddTaskModal);
+    addTaskBtnFab.addEventListener('click', openAddTaskModal);
     cancelTaskBtn.addEventListener('click', () => closeModal(taskModal));
 
-    // Button to add more task detail input fields
     addDetailBtn.addEventListener('click', () => {
         const count = taskDetailsList.querySelectorAll('.task-detail-input').length + 1;
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'task-detail-input'; // Apply styling
+        input.className = 'task-detail-input';
         input.required = true;
         input.placeholder = `Detail ${count}`;
         taskDetailsList.appendChild(input);
-        input.focus(); // Focus the new input field
+        input.focus();
     });
 
-    // Trigger form submission when the footer submit button is clicked
     submitTaskBtn.addEventListener('click', () => {
-        taskForm.requestSubmit(); // Programmatically triggers the form's submit event
+        if (taskForm.checkValidity()) { 
+            taskForm.requestSubmit();
+        } else {
+            taskForm.reportValidity(); 
+            setText(taskError, 'Please fill all required fields correctly.');
+            show(taskError, 'block');
+        }
     });
 
-    // Handle the actual form submission (for both Add and Edit)
     taskForm.addEventListener('submit', async (e) => {
-        e.preventDefault(); // Prevent default browser submission
-        // Reset UI
+        e.preventDefault();
         hide(taskError);
         setText(taskError, '');
-        show(taskLoader);
-        submitTaskBtn.disabled = true; // Disable button during processing
+        show(taskLoader, 'block');
+        submitTaskBtn.disabled = true;
 
-        // Collect task details from all input fields
         const details = Array.from(taskDetailsList.querySelectorAll('.task-detail-input'))
                              .map(input => input.value.trim())
-                             .filter(detail => detail); // Filter out empty strings
+                             .filter(detail => detail);
 
-        // Construct the data object to save to Firestore
         const taskData = {
             taskName: taskForm.taskName.value.trim(),
             clientName: taskForm.clientName.value.trim(),
             email: taskForm.contactEmail.value.trim(),
             phone: taskForm.contactPhone.value.trim(),
             taskDetails: details,
-            dueDate: taskForm.dueDate.value, // Stored as YYYY-MM-DD string
+            dueDate: taskForm.dueDate.value,
             status: taskForm.status.value,
-            updatedAt: serverTimestamp() // Always update the 'updatedAt' timestamp
+            updatedAt: serverTimestamp()
         };
 
         try {
-            console.log("Submitting task. Checking db object:", db);
-            if (!db) throw new Error("Firestore db object is not available."); // Ensure db is ready
+            if (!db) throw new Error("Firestore db object is not available.");
 
             if (editingTaskId) {
-                // --- Update existing task ---
                 console.log(`Updating task ID: ${editingTaskId}`);
                 const docRef = doc(db, 'tasks', editingTaskId);
-                // Security rules should prevent unauthorized updates
                 await updateDoc(docRef, taskData);
                 console.log("Task updated successfully.");
             } else {
-                // --- Add new task ---
                 console.log("Adding new task.");
-                // Add the current user's ID and creation timestamp
                 taskData.userId = currentUserId;
                 taskData.createdAt = serverTimestamp();
                 await addDoc(collection(db, 'tasks'), taskData);
                 console.log("Task added successfully.");
             }
-            closeModal(taskModal); // Close the modal on success
-            await fetchAndStoreTasks(); // Re-fetch all tasks to update the local cache
-            renderFilteredTasks(); // Re-render the list with current filters applied
+            closeModal(taskModal);
+            await fetchAndStoreTasks();
+            renderFilteredTasks();
         } catch (err) {
-            // Handle errors during Firestore operation
             console.error("Error saving task:", err);
             setText(taskError, `Failed to save task: ${err.message}`);
-            show(taskError);
+            show(taskError, 'block');
         } finally {
-            // Reset UI state regardless of success or failure
             hide(taskLoader);
-            submitTaskBtn.disabled = false; // Re-enable the submit button
-            editingTaskId = null; // Reset editing state
+            submitTaskBtn.disabled = false;
+            editingTaskId = null;
         }
     });
 
 
     // --- Search and Filter Logic ---
-
-    // Debounced search input handler
     const handleSearch = debounce(() => {
         currentSearchTerm = searchInput.value.toLowerCase().trim();
-        console.log("Search term:", currentSearchTerm);
-        renderFilteredTasks(); // Re-render the list based on the new search term
-    }, 300); // Debounce by 300ms
-
-    // Attach listener to search input
+        renderFilteredTasks();
+    }, 300);
     searchInput.addEventListener('input', handleSearch);
 
-    // Status filter dropdown handler
     statusFilter.addEventListener('change', () => {
         currentStatusFilter = statusFilter.value;
-        console.log("Status filter:", currentStatusFilter);
-        renderFilteredTasks(); // Re-render the list based on the new status filter
+        renderFilteredTasks();
     });
 
-    /**
-     * Filters the locally stored tasks (allUserTasks) based on current
-     * search term and status filter, then renders the results.
-     */
     function renderFilteredTasks() {
-        tasksList.innerHTML = ''; // Clear the current list display
-        // Hide messages initially
+        tasksList.innerHTML = '';
         hide(noTasksMessage);
         hide(noFilteredTasksMessage);
 
         const searchTerm = currentSearchTerm;
         const status = currentStatusFilter;
 
-        // Filter the cached tasks array
         const filteredTasks = allUserTasks.filter(task => {
-            // Check if status matches (or 'all' is selected)
             const matchesStatus = status === 'all' || task.status === status;
-            // Check if search term matches task name or client name (case-insensitive)
             const matchesSearch = !searchTerm ||
                                   task.taskName.toLowerCase().includes(searchTerm) ||
                                   task.clientName.toLowerCase().includes(searchTerm);
-                                  // Can add more fields to search here (e.g., task.email)
-
-            return matchesStatus && matchesSearch; // Task must match both filters
+            return matchesStatus && matchesSearch;
         });
 
-        console.log(`Rendering ${filteredTasks.length} filtered tasks.`);
-
-        // Display appropriate message or render task cards
         if (allUserTasks.length === 0) {
-             show(noTasksMessage); // Show if the user has no tasks at all
+             show(noTasksMessage, 'block');
         } else if (filteredTasks.length === 0) {
-            show(noFilteredTasksMessage); // Show if filters result in zero matches
+            show(noFilteredTasksMessage, 'block');
         } else {
-            // Render a card for each filtered task
             filteredTasks.forEach(task => {
-                renderTaskCard(task, task.id); // Pass the full task object and its ID
+                renderTaskCard(task, task.id);
             });
         }
     }
 
 
     // --- Data Fetching and Rendering ---
-
-    /**
-     * Fetches all tasks for the current user from Firestore,
-     * stores them in the `allUserTasks` array, and triggers an initial render.
-     */
     async function fetchAndStoreTasks() {
-        console.log(`Fetching ALL tasks from Firestore for user: ${currentUserId}`);
-        allUserTasks = []; // Clear the local cache before fetching
-
+        allUserTasks = [];
         try {
-            console.log("Fetching tasks. Checking db object:", db);
-            if (!db) throw new Error("Firestore db object is not available."); // Ensure db is ready
-
-            // Construct the Firestore query: tasks for the current user, ordered by creation date
+            if (!db) throw new Error("Firestore db object is not available.");
             const q = query(
                 collection(db, 'tasks'),
-                where("userId", "==", currentUserId), // Filter by user ID
-                orderBy('createdAt', 'desc') // Order newest first
+                where("userId", "==", currentUserId),
+                orderBy('createdAt', 'desc')
             );
-            const querySnapshot = await getDocs(q); // Execute the query
-
-            if (querySnapshot.empty) {
-                console.log("No tasks found for this user in Firestore.");
-            } else {
-                 console.log(`Fetched ${querySnapshot.size} total tasks for this user.`);
-                 // Populate the local cache with task data and document ID
-                 querySnapshot.forEach((docSnap) => {
-                    allUserTasks.push({ id: docSnap.id, ...docSnap.data() });
-                 });
-            }
-            // Perform the initial rendering based on fetched data and default filters
+            const querySnapshot = await getDocs(q);
+            querySnapshot.forEach((docSnap) => {
+                allUserTasks.push({ id: docSnap.id, ...docSnap.data() });
+            });
             renderFilteredTasks();
-
         } catch (error) {
-            // Handle errors during fetching
             console.error("Error fetching tasks:", error);
             tasksList.innerHTML = '<div class="text-center text-red-600 col-span-full">Error loading tasks. Please try again later.</div>';
-            // Ensure messages are hidden if there's an error
             hide(noTasksMessage);
             hide(noFilteredTasksMessage);
         }
     }
 
-    /**
-     * Renders a single task card HTML element.
-     * @param {object} task - The task data object (including id).
-     * @param {string} taskId - The Firestore document ID for the task.
-     */
     function renderTaskCard(task, taskId) {
         const card = document.createElement('div');
-        // Apply Tailwind classes for styling and hover effects
         card.className = 'bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transition transform hover:scale-[1.03] duration-150 ease-in-out border-l-4';
-        // Set left border color based on task status
         card.style.borderLeftColor = getStatusColor(task.status);
 
-        // Format due date for display (handle potential timezone issues)
-        const formattedDueDate = task.dueDate ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString() : 'N/A';
-        // Generate CSS class for the status badge
+        const formattedDueDate = task.dueDate ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
         const statusClass = `status-badge-${task.status.toLowerCase().replace(/\s+/g, '-')}`;
 
-        // Set the inner HTML of the card using template literals
         card.innerHTML = `
             <div class="p-4">
                 <div class="text-base font-semibold text-gray-800 mb-1 truncate" style="color: #002147;">${escapeHtml(task.taskName)}</div>
@@ -497,100 +443,68 @@ function initializeDashboard(currentUser) {
                 </div>
             </div>
         `;
-        // Add click listener to open the detail modal for this task
         card.addEventListener('click', () => openTaskDetailModal(taskId));
-        tasksList.appendChild(card); // Add the card to the list container
+        tasksList.appendChild(card);
     }
 
-    /**
-     * Returns a hex color code based on the task status.
-     * @param {string} status - The task status ('Pending', 'In Progress', 'Completed').
-     * @returns {string} The corresponding color code.
-     */
     function getStatusColor(status) {
         switch (status) {
-            case 'Pending': return '#9ca3af'; // gray-400
-            case 'In Progress': return '#f59e0b'; // amber-500
-            case 'Completed': return '#10b981'; // emerald-500
-            default: return '#6b7280'; // gray-500 (fallback)
+            case 'Pending': return '#9ca3af';
+            case 'In Progress': return '#f59e0b';
+            case 'Completed': return '#10b981';
+            default: return '#6b7280';
         }
     }
 
-    /**
-     * Fetches details for a specific task and opens the detail modal.
-     * @param {string} taskId - The Firestore document ID of the task.
-     */
     async function openTaskDetailModal(taskId) {
-        console.log(`Opening details for task ID: ${taskId}`);
-        // Clear previous content and show loader
         taskDetailsContent.innerHTML = '<div class="text-center py-4"><div class="loader"></div></div>';
-        // Ensure buttons from previous modal instance don't retain old listeners
         const existingDeleteBtn = taskDetailModal.querySelector('#deleteTaskBtn');
         const existingEditBtn = taskDetailModal.querySelector('#editTaskBtn');
         if (existingDeleteBtn) existingDeleteBtn.onclick = null;
         if (existingEditBtn) existingEditBtn.onclick = null;
 
-        openModal(taskDetailModal); // Show the modal
+        openModal(taskDetailModal);
 
         try {
-             console.log("Opening task detail. Checking db object:", db);
-             if (!db) throw new Error("Firestore db object is not available."); // Ensure db is ready
-
-            const docRef = doc(db, 'tasks', taskId); // Get reference to the specific task document
-            const docSnap = await getDoc(docRef); // Fetch the document
+             if (!db) throw new Error("Firestore db object is not available.");
+            const docRef = doc(db, 'tasks', taskId);
+            const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 const task = docSnap.data();
-                // --- Security Check ---
-                // Verify the fetched task actually belongs to the logged-in user
                 if (task.userId === currentUserId) {
-                    renderTaskDetails(task, taskId); // Render details if user owns the task
+                    renderTaskDetails(task, taskId);
                 } else {
-                    // If user doesn't own the task, show access denied message
-                    console.warn(`Attempted to open details for task ${taskId} which does not belong to user ${currentUserId}.`);
                     taskDetailsContent.innerHTML = '<div class="text-center text-red-600 py-4">Access Denied.</div>';
-                     // Hide Edit/Delete buttons in the footer
                      const deleteBtn = taskDetailModal.querySelector('#deleteTaskBtn');
                      const editBtn = taskDetailModal.querySelector('#editTaskBtn');
                      if(deleteBtn) hide(deleteBtn);
                      if(editBtn) hide(editBtn);
                 }
             } else {
-                // Handle case where the task document doesn't exist
-                console.log("Task not found.");
                 taskDetailsContent.innerHTML = '<div class="text-center text-red-600 py-4">Task not found.</div>';
             }
         } catch (error) {
-            // Handle errors during fetching
             console.error("Error fetching task details:", error);
             taskDetailsContent.innerHTML = '<div class="text-center text-red-600 py-4">Error loading details.</div>';
         }
     }
 
-    /**
-     * Renders the task details inside the detail modal and attaches listeners
-     * to the Edit and Delete buttons in the modal's footer.
-     * @param {object} task - The task data object.
-     * @param {string} taskId - The Firestore document ID of the task.
-     */
     function renderTaskDetails(task, taskId) {
-        const formattedDueDate = task.dueDate ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString() : 'N/A';
+        const formattedDueDate = task.dueDate ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
         const statusClass = `status-badge-${task.status.toLowerCase().replace(/\s+/g, '-')}`;
 
-        // Generate HTML for the list of task details
-        let detailsHtml = 'Not provided';
+        let detailsHtml = '<p class="text-gray-500"><em>Not provided</em></p>';
         if (Array.isArray(task.taskDetails) && task.taskDetails.length > 0) {
-            detailsHtml = '<ul class="list-disc list-inside pl-4 mt-1 space-y-1">';
+            detailsHtml = '<ul class="list-disc list-inside pl-1 mt-1 space-y-1">';
             task.taskDetails.forEach(detail => {
                 detailsHtml += `<li>${escapeHtml(detail)}</li>`;
             });
             detailsHtml += '</ul>';
         } else if (typeof task.taskDetails === 'string' && task.taskDetails) {
-             // Handle case where details might be a single string (older format?)
              detailsHtml = `<p class="mt-1">${escapeHtml(task.taskDetails)}</p>`;
         }
 
-        // Set the inner HTML of the modal's content area
         taskDetailsContent.innerHTML = `
             <div class="space-y-2">
                 <div><strong>Task Name:</strong> ${escapeHtml(task.taskName)}</div>
@@ -603,98 +517,52 @@ function initializeDashboard(currentUser) {
             </div>
         `;
 
-        // Get buttons from the modal footer (they are persistent elements)
         const editBtn = taskDetailModal.querySelector('#editTaskBtn');
         const deleteBtn = taskDetailModal.querySelector('#deleteTaskBtn');
 
-        // Attach listener to Edit button
         if (editBtn) {
-            show(editBtn); // Ensure button is visible
-            // Pass the current task data and ID to the edit modal opener
+            show(editBtn, 'inline-block');
             editBtn.onclick = () => openEditTaskModal(task, taskId);
-        } else {
-            console.error("Edit button not found in detail modal footer");
         }
-
-        // Attach listener to Delete button
         if (deleteBtn) {
-            show(deleteBtn); // Ensure button is visible
-            deleteBtn.onclick = () => deleteTask(taskId); // Call delete function with task ID
-        } else {
-             console.error("Delete button not found in detail modal footer");
+            show(deleteBtn, 'inline-block');
+            deleteBtn.onclick = () => deleteTask(taskId);
         }
     }
 
-    /**
-     * Handles the deletion of a task after confirmation.
-     * @param {string} taskId - The Firestore document ID of the task to delete.
-     */
     async function deleteTask(taskId) {
-        // Show confirmation dialog before proceeding
-        if (!confirm("Are you sure you want to delete this task? This action cannot be undone.")) {
-            return; // Stop if user clicks Cancel
+        if (!window.confirm("Are you sure you want to delete this task? This action cannot be undone.")) {
+            return;
         }
-
-        console.log(`Attempting to delete task ID: ${taskId}`);
-        // TODO: Optionally add a loading indicator specifically for deletion
-
         try {
-            if (!db) throw new Error("Firestore db object is not available."); // Ensure db is ready
-
-            const docRef = doc(db, 'tasks', taskId); // Get reference to the document
-            await deleteDoc(docRef); // Delete the document from Firestore
-
-            console.log("Task deleted successfully.");
-            closeModal(taskDetailModal); // Close the detail modal
-
-            // --- Update UI Immediately ---
-            // Remove the deleted task from the local cache
+            if (!db) throw new Error("Firestore db object is not available.");
+            const docRef = doc(db, 'tasks', taskId);
+            await deleteDoc(docRef);
+            closeModal(taskDetailModal);
             allUserTasks = allUserTasks.filter(task => task.id !== taskId);
-            // Re-render the task list from the updated cache
             renderFilteredTasks();
-
-            // TODO: Optionally show a temporary success message (e.g., a toast notification)
-
         } catch (error) {
-            // Handle errors during deletion
             console.error("Error deleting task:", error);
-            // Show error message to the user
-            alert(`Failed to delete task: ${error.message}`); // Replace alert with better UI later
-        } finally {
-            // TODO: Hide deletion loading indicator if one was added
+            alert(`Failed to delete task: ${error.message}`); 
         }
     }
 
-    /**
-     * Opens the Add/Edit modal in "Edit" mode, pre-filling the form.
-     * @param {object} task - The task data object to edit.
-     * @param {string} taskId - The Firestore document ID of the task.
-     */
     function openEditTaskModal(task, taskId) {
-        // --- Security Check ---
-        // Double-check ownership before allowing edit modal to open
         if (task.userId !== currentUserId) {
-             console.warn(`Attempted to edit task ${taskId} which does not belong to user ${currentUserId}.`);
-             alert("You do not have permission to edit this task."); // Inform user
-             return; // Prevent modal from opening
+             alert("You do not have permission to edit this task.");
+             return;
         }
-
-        console.log(`Opening edit modal for task ID: ${taskId}`);
-        editingTaskId = taskId; // Set the state to indicate we are editing
-        setText(modalHeader, 'Edit Task'); // Set modal title
-
-        // Pre-fill form fields with existing task data
+        editingTaskId = taskId;
+        setText(modalHeader, 'Edit Task');
         taskForm.taskName.value = task.taskName || '';
         taskForm.clientName.value = task.clientName || '';
         taskForm.contactEmail.value = task.email || '';
         taskForm.contactPhone.value = task.phone || '';
         taskForm.dueDate.value = task.dueDate || '';
-        taskForm.status.value = task.status || 'Pending'; // Default to Pending if status is missing
+        taskForm.status.value = task.status || 'Pending';
 
-        // Pre-fill task details input fields
-        taskDetailsList.innerHTML = ''; // Clear any previous detail inputs
+        taskDetailsList.innerHTML = '';
         if (Array.isArray(task.taskDetails) && task.taskDetails.length > 0) {
-            // Create an input for each existing detail
             task.taskDetails.forEach((detail, index) => {
                 const input = document.createElement('input');
                 input.type = 'text';
@@ -705,26 +573,355 @@ function initializeDashboard(currentUser) {
                 taskDetailsList.appendChild(input);
             });
         } else {
-            // If no details exist, add one empty input field
             taskDetailsList.innerHTML = '<input type="text" class="task-detail-input" required placeholder="Detail 1">';
         }
-
-        // Reset UI states for the modal
         setText(taskError, '');
         hide(taskLoader);
-        submitTaskBtn.disabled = false; // Ensure submit button is enabled
-
-        closeModal(taskDetailModal); // Close the detail modal if it was open
-        openModal(taskModal); // Open the Add/Edit modal
+        submitTaskBtn.disabled = false;
+        closeModal(taskDetailModal);
+        openModal(taskModal);
     }
 
-    // Close button listener for the Task Detail modal
     closeDetailBtn.addEventListener('click', () => closeModal(taskDetailModal));
 
+
+    // --- INVOICE GENERATION LOGIC ---
+    const openClientSelectionModal = () => {
+        invoiceClientSelect.innerHTML = '<option value="">-- Select a Client --</option>'; 
+        setText(clientSelectionError, '');
+        nextToInvoiceFormBtn.disabled = true;
+
+        if (allUserTasks.length === 0) {
+            setText(clientSelectionError, 'No tasks found to derive client list.');
+            openModal(clientSelectionModal);
+            return;
+        }
+
+        const clientNames = [...new Set(allUserTasks.map(task => task.clientName.trim()).filter(name => name))]
+                            .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+        if (clientNames.length === 0) {
+            setText(clientSelectionError, 'No unique clients found in tasks.');
+        } else {
+            clientNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = escapeHtml(name);
+                option.textContent = escapeHtml(name);
+                invoiceClientSelect.appendChild(option);
+            });
+        }
+        openModal(clientSelectionModal);
+    };
+
+    if (generateInvoiceBtnNav) generateInvoiceBtnNav.addEventListener('click', openClientSelectionModal);
+    if (generateInvoiceBtnFab) generateInvoiceBtnFab.addEventListener('click', openClientSelectionModal);
+
+
+    invoiceClientSelect.addEventListener('change', () => {
+        if (invoiceClientSelect.value) {
+            nextToInvoiceFormBtn.disabled = false;
+            setText(clientSelectionError, '');
+        } else {
+            nextToInvoiceFormBtn.disabled = true;
+        }
+    });
+
+    cancelClientSelectBtn.addEventListener('click', () => closeModal(clientSelectionModal));
+
+    nextToInvoiceFormBtn.addEventListener('click', () => {
+        selectedInvoiceClient = invoiceClientSelect.value;
+        if (!selectedInvoiceClient) {
+            setText(clientSelectionError, 'Please select a client.');
+            return;
+        }
+        closeModal(clientSelectionModal);
+        setText(invoiceClientNameDisplay, escapeHtml(selectedInvoiceClient));
+        
+        currentInvoiceItems = [];
+        renderInvoiceItems(); 
+        updateInvoiceTotals();
+        invoiceItemService.value = '';
+        invoiceItemDescription.value = '';
+        invoiceItemQty.value = '1'; // Default Qty to 1
+        invoiceItemPrice.value = ''; // Default Price to empty
+        setText(invoiceFormError, '');
+        openModal(invoiceFormModal);
+        invoiceItemService.focus();
+    });
+
+    function renderInvoiceItems() {
+        invoiceItemsList.innerHTML = '';
+        if (currentInvoiceItems.length === 0) {
+            invoiceItemsList.innerHTML = '<p class="text-sm text-gray-500 text-center p-4">No items added yet.</p>';
+            downloadInvoicePdfBtn.disabled = true;
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'w-full text-sm';
+        const thead = document.createElement('thead');
+        thead.innerHTML = `
+            <tr class="border-b bg-slate-50 text-left">
+                <th class="py-2 px-3 font-semibold text-gray-600">Service/Item</th>
+                <th class="py-2 px-3 font-semibold text-gray-600 text-right">Qty x Price</th>
+                <th class="py-2 px-3 font-semibold text-gray-600 text-right">Total</th>
+                <th class="py-2 px-1 w-10 font-semibold text-gray-600 text-center"></th>
+            </tr>
+        `;
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        currentInvoiceItems.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b last:border-b-0 hover:bg-slate-50 transition-colors duration-150';
+            tr.innerHTML = `
+                <td class="py-2.5 px-3">
+                    <div class="font-medium text-gray-700">${escapeHtml(item.service)}</div>
+                    ${item.description ? `<div class="text-xs text-gray-500">${escapeHtml(item.description)}</div>` : ''}
+                </td>
+                <td class="py-2.5 px-3 text-right text-gray-600">${item.qty} x ${CURRENCY_SYMBOL} ${parseFloat(item.price).toFixed(2)}</td>
+                <td class="py-2.5 px-3 text-right font-medium text-gray-700">${CURRENCY_SYMBOL} ${parseFloat(item.lineTotal).toFixed(2)}</td>
+                <td class="py-2.5 px-1 text-center">
+                    <button type="button" class="text-red-500 hover:text-red-700 removeItemBtn p-1 rounded-full hover:bg-red-100 transition-colors" data-index="${index}" title="Remove Item">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        invoiceItemsList.appendChild(table);
+        downloadInvoicePdfBtn.disabled = false;
+
+        invoiceItemsList.querySelectorAll('.removeItemBtn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const indexToRemove = parseInt(e.target.closest('button').dataset.index);
+                currentInvoiceItems.splice(indexToRemove, 1);
+                renderInvoiceItems();
+                updateInvoiceTotals();
+            });
+        });
+    }
+
+    function updateInvoiceTotals() {
+        const subtotal = currentInvoiceItems.reduce((sum, item) => sum + item.lineTotal, 0);
+        const grandTotal = subtotal; 
+
+        setText(invoiceSubtotalDisplay, `${CURRENCY_SYMBOL} ${subtotal.toFixed(2)}`);
+        setText(invoiceGrandTotalDisplay, `${CURRENCY_SYMBOL} ${grandTotal.toFixed(2)}`);
+    }
+
+    addInvoiceItemBtn.addEventListener('click', () => {
+        const service = invoiceItemService.value.trim();
+        const description = invoiceItemDescription.value.trim();
+        // Qty and Price are now integers due to step="1" in HTML
+        const qty = parseInt(invoiceItemQty.value); 
+        const price = parseInt(invoiceItemPrice.value);
+
+        setText(invoiceFormError, '');
+        if (!service) {
+            setText(invoiceFormError, 'Service/Product name is required.');
+            invoiceItemService.focus();
+            return;
+        }
+        if (isNaN(qty) || qty <= 0) {
+            setText(invoiceFormError, 'Quantity must be a positive whole number.');
+            invoiceItemQty.focus();
+            return;
+        }
+        if (isNaN(price) || price < 0) { 
+            setText(invoiceFormError, 'Price must be a non-negative whole number.');
+            invoiceItemPrice.focus();
+            return;
+        }
+
+        currentInvoiceItems.push({
+            service,
+            description,
+            qty,
+            price,
+            lineTotal: qty * price
+        });
+
+        renderInvoiceItems();
+        updateInvoiceTotals();
+
+        invoiceItemService.value = '';
+        invoiceItemDescription.value = '';
+        invoiceItemQty.value = '1'; // Reset Qty to 1
+        invoiceItemPrice.value = ''; // Reset Price to empty
+        invoiceItemService.focus();
+    });
+    
+    const resetAndCloseInvoiceModal = () => {
+        closeModal(invoiceFormModal);
+        currentInvoiceItems = [];
+        selectedInvoiceClient = null;
+        invoiceClientSelect.value = ''; 
+        setText(invoiceFormError, '');
+    };
+
+    cancelInvoiceFormBtn.addEventListener('click', resetAndCloseInvoiceModal);
+    closeInvoiceFormBtn.addEventListener('click', resetAndCloseInvoiceModal);
+
+
+    downloadInvoicePdfBtn.addEventListener('click', () => {
+        if (currentInvoiceItems.length === 0) {
+            setText(invoiceFormError, 'Cannot generate PDF. No items in invoice.');
+            show(invoiceFormError, 'block');
+            return;
+        }
+        setText(invoiceFormError, '');
+
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        doc.setProperties({
+            title: `Invoice for ${selectedInvoiceClient}`,
+            subject: 'Service Invoice',
+            author: 'LexoTasks Manager',
+        });
+
+        const yourCompany = { 
+            name: currentUser.displayName || "Your Company Name", 
+            address: "123 Business Rd, Suite 456",
+            cityStateZip: "Banjul, The Gambia", 
+            phone: "(+220) XXX-XXXX",
+            email: currentUser.email || "contact@yourcompany.com"
+        };
+
+        doc.setFontSize(22);
+        doc.setFont(undefined, 'bold');
+        doc.text("INVOICE", 105, 22, { align: 'center' });
+        doc.setFont(undefined, 'normal');
+
+        let startY = 35;
+        doc.setFontSize(10);
+        doc.text(yourCompany.name, 20, startY);
+        doc.text(yourCompany.address, 20, startY + 5);
+        doc.text(yourCompany.cityStateZip, 20, startY + 10);
+        doc.text(`P: ${yourCompany.phone}`, 20, startY + 15);
+        doc.text(`E: ${yourCompany.email}`, 20, startY + 20);
+
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text("BILL TO:", 130, startY);
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(10);
+        doc.text(selectedInvoiceClient, 130, startY + 5);
+        
+        const clientTask = allUserTasks.find(task => task.clientName === selectedInvoiceClient);
+        if (clientTask && clientTask.email) {
+             doc.text(clientTask.email, 130, startY + 10);
+        }
+         if (clientTask && clientTask.phone) {
+             doc.text(clientTask.phone, 130, startY + 15);
+        }
+
+
+        const today = new Date();
+        const invoiceDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
+        const tempDueDate = new Date(); 
+        tempDueDate.setDate(today.getDate() + 30);
+        const dueDate = tempDueDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+
+
+        startY = startY + 10; 
+        doc.setFontSize(10);
+        doc.text(`Invoice #:`, 130, startY + 20); 
+        doc.setFont(undefined, 'bold');
+        doc.text(invoiceNumber, 155, startY + 20);
+        doc.setFont(undefined, 'normal');
+
+        doc.text(`Date:`, 130, startY + 25);
+        doc.setFont(undefined, 'bold');
+        doc.text(invoiceDate, 155, startY + 25);
+        doc.setFont(undefined, 'normal');
+        
+        doc.text(`Due Date:`, 130, startY + 30);
+        doc.setFont(undefined, 'bold');
+        doc.text(dueDate, 155, startY + 30);
+        doc.setFont(undefined, 'normal');
+
+
+        const tableColumn = ["#", "Service/Product", "Description", "Qty", `Unit Price (${CURRENCY_SYMBOL})`, `Total (${CURRENCY_SYMBOL})`];
+        const tableRows = [];
+
+        currentInvoiceItems.forEach((item, index) => {
+            const itemData = [
+                index + 1,
+                item.service,
+                item.description || '-', 
+                item.qty, // Qty is now an integer
+                parseFloat(item.price).toFixed(2), // Price is an integer, display with .00
+                parseFloat(item.lineTotal).toFixed(2) // Total, display with .00
+            ];
+            tableRows.push(itemData);
+        });
+
+        doc.autoTable({
+            startY: startY + 40, 
+            head: [tableColumn],
+            body: tableRows,
+            theme: 'striped', 
+            headStyles: { fillColor: [0, 33, 71] }, 
+            styles: { fontSize: 9, cellPadding: 1.8, valign: 'middle' },
+            columnStyles: {
+                0: { cellWidth: 10, halign: 'center' }, 
+                1: { cellWidth: 'auto' }, 
+                2: { cellWidth: 'auto' }, 
+                3: { cellWidth: 15, halign: 'right' }, 
+                4: { cellWidth: 25, halign: 'right' }, 
+                5: { cellWidth: 25, halign: 'right' }  
+            },
+            didDrawPage: function (data) { 
+                let pageCount = doc.internal.getNumberOfPages();
+                doc.setFontSize(8);
+                doc.text('Page ' + doc.internal.getCurrentPageInfo().pageNumber + ' of ' + pageCount, data.settings.margin.left, doc.internal.pageSize.height - 10);
+            }
+        });
+
+        let finalY = doc.autoTable.previous.finalY;
+        if (!finalY) { 
+            finalY = startY + 40 + (currentInvoiceItems.length * 10) + 20; 
+        }
+        finalY += 10; 
+
+        if (finalY > 250) { 
+             doc.addPage();
+             finalY = 20;
+        }
+
+        const subtotal = currentInvoiceItems.reduce((sum, item) => sum + item.lineTotal, 0);
+        const grandTotal = subtotal; 
+
+        doc.setFontSize(10);
+        doc.text(`Subtotal:`, 140, finalY, {align: 'left'});
+        doc.text(`${CURRENCY_SYMBOL} ${subtotal.toFixed(2)}`, 195, finalY, {align: 'right'});
+
+        finalY += 7;
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text(`TOTAL:`, 140, finalY, {align: 'left'});
+        doc.text(`${CURRENCY_SYMBOL} ${grandTotal.toFixed(2)}`, 195, finalY, {align: 'right'});
+        doc.setFont(undefined, 'normal');
+
+        finalY += 15;
+         if (finalY > 260) { doc.addPage(); finalY = 20; }
+        doc.setFontSize(9);
+        doc.text("Notes:", 20, finalY);
+        doc.text("Thank you for your business! Please make payments to GT Bank 2042681011590 0r WAVE 3735360.", 20, finalY + 5, { maxWidth: 175 });
+
+
+        doc.save(`Invoice-${invoiceNumber}-${selectedInvoiceClient.replace(/[^a-z0-9]/gi, '_')}.pdf`);
+    });
+
+
     // --- Initial Data Fetch ---
-    // Fetch tasks only if the user ID is valid
     if (currentUserId) {
-        fetchAndStoreTasks(); // Fetch all tasks for the user when the dashboard initializes
+        fetchAndStoreTasks();
     } else {
         console.error("Cannot fetch tasks, user ID is missing.");
     }
