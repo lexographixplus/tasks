@@ -784,11 +784,10 @@ function initializeDashboard(currentUser) {
         });
 
         const yourCompany = { 
-            name: currentUser.displayName || "Your Company Name", 
-            address: "123 Business Rd, Suite 456",
+            name: currentUser.displayName || "Bepro Visualz", 
             cityStateZip: "Banjul, The Gambia", 
-            phone: "(+220) XXX-XXXX",
-            email: currentUser.email || "contact@yourcompany.com"
+            phone: "(+220) 3735360",
+            email: currentUser.email || "infot@ybeprovisualz.com"
         };
 
         doc.setFontSize(22);
