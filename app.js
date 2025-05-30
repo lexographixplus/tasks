@@ -784,11 +784,11 @@ function initializeDashboard(currentUser) {
         });
 
         const yourCompany = { 
-            name: currentUser.displayName || "Bepro Visualz", 
-            address: "Kanifing Municipal Councl",
+            name: currentUser.displayName || "LexoGraphix Plus", 
+            address: "Kanifing Municipal Council",
             cityStateZip: "Banjul, The Gambia", 
             phone: "(+220) 3735360",
-            email: currentUser.email || "info@beprovisualz.com"
+            email: currentUser.email || "info@lexographixplus.com"
         };
 
         doc.setFontSize(22);
